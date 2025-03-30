@@ -1,0 +1,648 @@
+---
+title: "<span style='color: white;'>Predicting Loan Payment Defaults Using a Random Forest Model</span>"
+author: "<span style='color: white;'>Mathis Sassolas</span>"
+css: cssfiles.css
+execute:
+  shiny: true
+format: 
+  revealjs:
+    progress: true
+    mainfont: "Montserrat"
+    transition: fade
+    toc: true 
+    header-includes:
+      - |
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    footer: |
+      Random Forest Project - 2025 | <a href="https://github.com/Mathissas"><i class="fab fa-github"></i></a>
+    title-slide-attributes:
+      data-background-image: "XX.title.jpg"
+---
+
+## Introduction
+::::: {.columns}
+
+:::: {.column width="60%"}
+Accurately <span style="color:#022346; font-weight: bold;">predicting loan defaults</span> is crucial for banks to minimize financial losses and improve credit risk assessment. Traditional scoring systems often fail to capture complex relationships between variables, leading to suboptimal decisions.
+
+This project develops a <span style="color:#022346; font-weight: bold;">Random Forest-based model</span> to enhance prediction accuracy and decision-making. Its robustness in handling complex patterns offers the potential to reduce losses, optimize credit approval, and strengthen financial systems.
+::::
+
+:::: {.column width="40%"}
+![](XX.banking.jpg){width="100%"}
+::::
+:::::
+
+## Data
+```{r libraries, echo=F, message=F, warning = F}
+library(tidyverse)
+library(here)
+library(DT)
+library(plotly)
+library(readxl)
+library(scales)
+library(knitr)
+library(kableExtra)
+```
+
+```{r setup, echo=F, message=F, warning = F}
+setwd(here())
+df <- read_xlsx("loan_year2024.xlsx")
+```
+
+The dataset used in this project consists of <span style="color:#022346; font-weight: bold;">`r nrow(df)` observations</span> and <span style="color:#022346; font-weight: bold;">`r ncol(df)` features</span>. Each observation represents a loan along with the various <span style="color:#022346; font-weight: bold;">characteristics of the borrower</span>.
+
+::: {.scrollable style="max-height: 400px; overflow-y: auto;"}
+```{r table}
+# Make the names look better.
+cleaned_names <- c("Loan Number", "Number of Dependents", "Education", "Self-employed", "Annual Income", "Loan Amount", "Loan Term", "Credit Score", "Residential Assets Value", "Luxury Assets Value", "Commercial Assets Value" ,"Bank Asset Value", "Loan Status")
+df_pres <- df
+colnames(df_pres) <- cleaned_names
+
+
+datatable(
+  head(df_pres, 100),
+  options = list(
+    pageLength = 5,
+    scrollX = TRUE,        # Enable horizontal scrolling
+    autoWidth = TRUE,       # Auto-adjust column widths
+    searching = FALSE
+  ),
+  class = 'compact stripe hover',  # Compact design
+  colnames = cleaned_names
+)
+```
+:::
+
+---
+## Data {.unlisted}
+```{r factors}
+df1 <- df %>%
+  select(-loan_number) %>%
+  mutate(education = as.factor(education),
+         self_employed = as.factor(self_employed),
+         loan_status = as.factor(loan_status))
+```
+
+:::{.columns}
+
+::::{.column width="40%"}
+```{r percent}
+percent <- df1 %>% 
+  group_by(loan_status) %>% 
+  summarise(n=n()) %>% 
+  mutate(pourcent = round(n/sum(n)*100)) 
+
+```
+
+According to the data, <span style="color:#022346; font-weight: bold;">`r percent[2,3]`%</span> of loans have been rejected in 2024.
+
+```{r pie_1}
+
+pie_1 <- plot_ly(
+  data = percent,
+  labels = ~loan_status,
+  values = ~pourcent,
+  type = 'pie',
+  textinfo = "label+percent",
+  marker = list(colors = c("#28609b", "#022346")),
+  opacity = 0.9
+) %>%
+    layout(
+    autosize = TRUE, 
+    width = 400,
+    height = 400,
+    margin = list(l = 10, r = 10, t = 0, b = 0),
+    font = list(family = "Montserrat", size = 16, color = "black")
+  ) %>%
+  config(displayModeBar = FALSE)
+pie_1
+```
+
+
+::::
+::::{.column width="60%"}
+```{r}
+custom_colors <- c("Approved" = "#28609b", "Rejected" = "#022346")
+
+df_summary <- df1 %>%
+  group_by(no_of_dependents, loan_status) %>%
+  summarise(count = n())
+
+
+# Create a grouped bar plot
+bar_1 <- plot_ly(
+  data = df_summary,
+  x = ~as.factor(no_of_dependents),
+  y = ~count,
+  color = ~loan_status, 
+  colors = custom_colors,
+  type = 'bar',
+  text = ~count,
+  textposition = "auto",
+  marker = list(line = list(color = "white", width = 1))
+) %>%
+  layout(
+    height = 450,
+    width = 600,
+    barmode = "group",
+    margin = list(l = 50, r = 10, t = 30, b = 30),
+    font = list(family = "Montserrat", size = 16, color = "black"),
+    title = "Number of Dependents by Loan Status",
+    xaxis = list(title = "Number of Dependents"),
+    yaxis = list(title = "Frequency"),
+    legend = list(title = list(text = "Loan Status"))
+  )
+
+bar_1
+
+```
+::::
+:::
+
+## Data {.unlisted}
+:::{.columns}
+
+::::{.column width="40%"}
+According to the data, <span style="color:#022346; font-weight: bold;">`r percent[2,3]`%</span> of loans have been rejected in 2024.
+
+```{r pie_2}
+pie_1
+```
+::::
+
+::::{.column width="60%"}
+```{r density_1}
+p_1 <- ggplot(df1, aes(x = credit_info_score, fill = loan_status)) +
+  geom_density(alpha = 0.9) +
+  scale_fill_manual(values = custom_colors) +
+  labs(title = "Credit Score Distribution by Loan Status", y = "Density", x = "Credit Score", fill = "Loan Status") + 
+  theme_minimal() +
+  theme(
+    text = element_text(color = "black", size = 15),
+    axis.text = element_text(color = "black", size = 16),
+    panel.grid = element_blank()
+  )
+
+density_1 <- ggplotly(p_1) %>%
+  layout(
+    height = 450,
+    width = 600,
+    barmode = "group",
+    margin = list(l = 50, r = 10, t = 30, b = 30),
+    font = list(family = "Montserrat", size = 16, color = "black"),
+    title = "Credit Score Density by Loan Status",
+    xaxis = list(title = "Credit Score"),
+    yaxis = list(title = "Density"),
+    legend = list(title = list(text = "Loan Status"))
+  )
+density_1
+```
+::::
+:::
+
+## Data {.unlisted}
+
+```{r other_viz}
+# Annual_income
+p_2 <- ggplot(df1, aes(x = income_annum, fill = loan_status)) +
+  geom_density(alpha = 0.9) +
+  scale_fill_manual(values = custom_colors) + 
+  scale_x_continuous(labels = dollar) +
+  scale_y_continuous(labels = comma) +
+  theme_minimal() +
+  theme(
+    text = element_text(color = "black", size = 15),
+    axis.text = element_text(color = "black", size = 10),
+    axis.text.x = element_text(angle = 45),
+    panel.grid = element_blank()
+  )
+
+density_2 <- ggplotly(p_2) %>%
+  layout(
+    height = 600,
+    width = 1000,
+    barmode = "group",
+    margin = list(l = 50, r = 10, t = 60, b = 60),
+    font = list(family = "Montserrat", size = 13, color = "black"),
+    title = "Income Density by Loan Status",
+    xaxis = list(title = "Annual Income"),
+    yaxis = list(title = "Density"),
+    legend = list(title = list(text = "Loan Status")),
+    showlegend = TRUE
+  )
+
+# Loan Amount
+p_3 <- ggplot(df1, aes(x = loan_amount, fill = loan_status)) +
+  geom_density(alpha = 0.9) +
+  scale_fill_manual(values = custom_colors) +
+  scale_x_continuous(labels = dollar) +
+  scale_y_continuous(labels = comma) +
+  theme_minimal() +
+  theme(
+    text = element_text(color = "black", size = 15),
+    axis.text = element_text(color = "black", size = 10),
+    axis.text.x = element_text(angle = 45),
+    panel.grid = element_blank()
+  )
+
+density_3 <- ggplotly(p_3) %>%
+  layout(
+    height = 600,
+    width = 1000,
+    barmode = "group",
+    margin = list(l = 50, r = 10, t = 60, b = 60),
+    font = list(family = "Montserrat", size = 13, color = "black"),
+    title = "Loan Amount Density by Loan Status",
+    xaxis = list(title = "Loan Amount"),
+    yaxis = list(title = "Density"),
+    legend = list(title = list(text = "Loan Status")),
+    showlegend = TRUE
+  )
+
+# Loan Term
+p_4 <- ggplot(df1, aes(x = loan_term, fill = loan_status)) +
+  geom_density(alpha = 0.9) +
+  scale_fill_manual(values = custom_colors) +
+  scale_y_continuous(labels = comma) +
+  theme_minimal() +
+  theme(
+    text = element_text(color = "black", size = 15),
+    axis.text = element_text(color = "black", size = 10),
+    panel.grid = element_blank()
+  )
+
+density_4 <- ggplotly(p_4) %>%
+  layout(
+    height = 600,
+    width = 1000,
+    barmode = "group",
+    margin = list(l = 50, r = 10, t = 60, b = 60),
+    font = list(family = "Montserrat", size = 13, color = "black"),
+    title = "Loan Term Density by Loan Status",
+    xaxis = list(title = "Loan Term"),
+    yaxis = list(title = "Density"),
+    legend = list(title = list(text = "Loan Status")),
+    showlegend = TRUE
+  )
+
+# Residential assets value
+p_5 <- ggplot(df1, aes(x = residential_assets_value, fill = loan_status)) +
+  geom_density(alpha = 0.9) +
+  scale_fill_manual(values = custom_colors) + 
+  scale_x_continuous(labels = dollar) +
+  scale_y_continuous(labels = comma) +
+  theme_minimal() +
+  theme(
+    text = element_text(color = "black", size = 15),
+    axis.text = element_text(color = "black", size = 10),
+    axis.text.x = element_text(angle = 45),
+    panel.grid = element_blank()
+  )
+
+density_5 <- ggplotly(p_5) %>%
+  layout(
+    height = 600,
+    width = 1000,
+    barmode = "group",
+    margin = list(l = 50, r = 10, t = 60, b = 60),
+    font = list(family = "Montserrat", size = 13, color = "black"),
+    title = "Residential Assets Density by Loan Status",
+    xaxis = list(title = "Residential Assets Value"),
+    yaxis = list(title = "Density"),
+    legend = list(title = list(text = "Loan Status")),
+    showlegend = TRUE
+  )
+
+```
+
+
+```{r grouped}
+grid_plot <- subplot(
+  density_2,
+  density_3,
+  density_4,
+  density_5,
+  nrows = 2, 
+  shareX = FALSE,  
+  shareY = FALSE, 
+  titleX = TRUE,   
+  titleY = TRUE,
+  margin = 0.07   # Even smaller margin
+) %>%
+  layout(
+    title = list(
+      text = "Density Distributions", 
+      x = 0.5,  
+      y = 0.97,
+      font = list(size = 22, color = "black")
+    ),
+    autosize = TRUE, 
+    font = list(family = "Montserrat", size = 14, color = "black")
+  )
+grid_plot
+```
+
+## Random Forest Model {.custom-font}
+
+:::{.columns}
+::::{.column width="50%"}
+<span style="color:#022346; font-weight: bold;">Random forests</span> are machine learning models that build multiple decision trees and combine their predictions to improve accuracy and robustness. At each split within a tree, only a <span style="color:#022346; font-weight: bold;">random subset of features</span> is considered, ensuring diversity among the trees. For classification, each tree votes on the most likely class, and the final prediction is made by <span style="color:#022346; font-weight: bold;">majority vote</span>, increasing generalization with respect to individual decision tree.
+
+Unlike probit or logit models, which are parametric, the main advantages of random forests are their ability to <span style="color:#022346; font-weight: bold;">handle non-linear relationships</span>, <span style="color:#022346; font-weight: bold;">robustness to noise</span>, and <span style="color:#022346; font-weight: bold;">insensitivity to missing data and outliers</span>. Since they do not rely on strong assumptions about the data, they perform well in <span style="color:#022346; font-weight: bold;">high-dimensional settings</span>, where traditional models may struggle. Random forest models are also resistant to overfitting due to their averaging mechanism.
+
+::::
+::::{.column width="50%"}
+:::::{.callout-tip title="Decision Tree" appearance="simple"}
+A decision tree recursively splits data at decision nodes based on feature values, starting from a root node that represents the entire dataset, and ending at leaf nodes, which provide the final predicted outcome or class.
+:::::
+![](XX.footer.png){}
+::::
+:::
+
+## Implementation
+:::{.columns}
+::::{.column width="45%"}
+We implement the model in R using the `randomForest` package.
+
+* We replace the character variables with factors.
+
+* We split the data into a training set and a testing set.
+
+* We train a model of a hundred trees.
+
+In the next slide, we will evaluate the model, which is why we created a testing set. It acts as an independent dataset. This helps assess its real-world predictive power.
+
+
+::::
+::::{.column width="55%"}
+```{r model, echo=T}
+library(randomForest)
+
+## Remove the loan number column since it is not an explanatory variables.
+## replace character variables by factors.
+df1 <- df %>%
+  select(-loan_number) %>%
+  mutate(education = as.factor(education),
+         self_employed = as.factor(self_employed),
+         loan_status = as.factor(loan_status))
+
+## Split the dataset (80% training, 20% testing)
+set.seed(42)
+trainIndex <- sample(c(1:nrow(df1)),
+                     0.8*nrow(df1),
+                     replace = FALSE)
+
+df_train <- df1[trainIndex, ]
+df_test <- df1[-trainIndex, ]
+
+## Train the model.
+rf_model <- randomForest(loan_status ~ .,
+                         data = df_train,
+                         ntree = 100,
+                         random_state = 42)
+```
+::::
+:::
+
+## Evaluation
+:::{.columns}
+::::{.column width="50%"}
+:::{.content-box .box}
+```{r evaluation, echo=T}
+library(caret)
+
+## Predict on the testing set
+df_test$predict <- predict(rf_model,
+                           df_test)
+
+## Confusion matrix
+conf_matrix <- confusionMatrix(df_test$predict,
+                      df_test$loan_status)
+table <- conf_matrix$table
+
+## Accuracy
+accuracy <- conf_matrix$overall["Accuracy"]
+
+## Precision: % of predicted positives that are correct?
+precision <- conf_matrix$byClass["Pos Pred Value"]
+
+## Recall: % of actual positives that were correctly found?
+recall <- conf_matrix$byClass["Sensitivity"]
+```
+:::
+:::{.content-box .box}
+```{r conf_matrix}
+## Confusion matrix presentation
+kable(table, caption = "Confusion Matrix") %>%
+  kable_styling(full_width = FALSE, font_size = 25)
+```
+:::
+::::
+::::{.column width="50%"}
+We evaluate the model using the `caret` library. This library allows us to create the confusion matrix and other useful metrics such as accuracy, precision, and recall.
+
+The <span style="color:#022346; font-weight: bold;">confusion matrix</span> displays the true loan status in each column, while each row represents the model's predictions.
+
+The model demonstrates strong predictive power, with <span style="color:#022346; font-weight: bold;">`r round(accuracy*100,1)`%</span> of loan statuses correctly identified (accuracy), <span style="color:#022346; font-weight: bold;">`r round(precision*100,1)`%</span> of predicted positives being truly positive (precision), and <span style="color:#022346; font-weight: bold;">`r round(recall*100,1)`%</span> of actual positives correctly detected (recall).
+
+::::
+:::
+
+## Feature importance {.custom-font}
+:::{.columns}
+::::{.column width="45%"}
+As expected, the <span style="color:#022346; font-weight: bold;">credit score</span> is by far the most influential feature in the credit status determination as it encapsulates a borrower’s financial reliability, past repayment behavior, and risk level.
+
+The <span style="color:#022346; font-weight: bold;">loan term</span> is the second most influential feature, meaning that longer loan term may be associated with higher risks of default, possibly due to changes in financial stability over time.
+
+The <span style="color:#022346; font-weight: bold;">loan amounts</span> and <span style="color:#022346; font-weight: bold;">annual incomes</span> also play roles, though smaller. This indicates that while larger loans can be risky, the borrower’s income is an essential factor in repayment ability.
+
+Other factors affect a borrower's loan status but in a much smaller extent such as <span style="color:#022346; font-weight: bold;">bank assets value</span> or <span style="color:#022346; font-weight: bold;">number of dependents</span>.
+::::
+::::{.column width="55%"}
+```{r importance}
+## Variables importance.
+importance_df <- data.frame(Feature = rownames(rf_model$importance),
+                            Importance = rf_model$importance[, "MeanDecreaseGini"])
+importance_df <- importance_df %>%
+  arrange(desc(Importance))
+
+## Plot  
+plot <- ggplot(importance_df, aes(x = reorder(Feature, Importance), y = Importance)) +
+  geom_bar(stat = "identity", fill = "#022346", color = "#28609b", alpha = 0.7) +
+  coord_flip() +
+  labs(title = "Variables Importance for Loan Status", x = "Features", y = "Importance") +
+theme_minimal() +
+  theme(
+    axis.text = element_text(color = "black", size = "15")
+  )
+
+importance_plot <- ggplotly(plot) %>%
+  layout(
+    width = 600,
+    height = 450, 
+    margin = list(l = 120, r = 30, t = 60, b = 50),
+    font = list(family = "Montserrat", size = 16, color = "black"),
+    title = "<b>Features importance in loan status predictions</b>",
+    xaxis = list(title = "<b>Importance</b>"),
+    yaxis = list(title = "<b>Features</b>")
+  )
+importance_plot
+```
+::::
+:::
+
+## Partial Dependence Plots {.custom-font}
+
+:::{.columns}
+::::{.column width="45%"}
+
+In the previous slide, we outlined the features that contributed most significantly to the model’s predictions. However, feature importance does not provide insight into the nature or direction of these effects. This is instead illustrated by the <span style="color:#022346; font-weight: bold;">Partial Dependence Plots</span> (PDP).
+
+A PDP shows the <span style="color:#022346; font-weight: bold;">marginal effect</span> of a feature on the predicted outcome of a machine learning model. The x-axis represents the values of the feature of interest, while the y-axis shows the average predicted outcome, computed by marginalizing over the distribution of all other features in the dataset.
+
+In our case, the PDP for  <span style="color:#022346; font-weight: bold;">credit score</span> indicates that loans are unlikely to be repaid when the credit score is below approximately <span style="color:#022346; font-weight: bold;">521</span>. Beyond this threshold, the likelihood of repayment increases sharply.
+::::
+::::{.column width="55%"}
+```{r}
+library(iml)
+X_train <- df_train %>% select(-loan_status)
+y_train <- df_train$loan_status
+
+# Predicator object
+predictor <- Predictor$new(rf_model, data = X_train, y = y_train, type = "prob", class = "Approved")
+
+# PDP
+pdp_credit <- FeatureEffect$new(predictor, feature = "credit_info_score", method = "pdp")
+pdp_data <- pdp_credit$results
+
+
+p <- ggplot(pdp_data, aes(x = credit_info_score, y = .value)) +
+  geom_line(color = "#1f77b4", size = 1.2) +
+  theme_minimal()
+
+credit <- ggplotly(p) %>%
+  layout(
+    width = 600,
+    height = 450, 
+    margin = list(l = 120, r = 30, t = 60, b = 50),
+    font = list(family = "Montserrat", size = 16, color = "black"),
+    title = "<b>PDP : Credit Score</b>",
+    xaxis = list(title = "<b>Credit Score</b>"),
+    yaxis = list(title = "<b>Predicted Probability</b>")
+  )
+credit
+
+```
+::::
+:::
+## Partial Dependence Plots {.unlisted}
+
+```{r loan_term}
+pdp_term <- FeatureEffect$new(predictor, feature = "loan_term", method = "pdp")
+pdp_data_2 <- pdp_term$results
+
+p <- ggplot(pdp_data_2, aes(x = loan_term, y = .value)) +
+  geom_line(color = "#1f77b4", size = 1.2) +
+  scale_x_continuous(labels = dollar) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45))
+
+term <- ggplotly(p) %>%
+  layout(
+    width = 1100,
+    height = 450, 
+    margin = list(l = 120, r = 30, t = 60, b = 50),
+    font = list(family = "Montserrat", size = 16, color = "black"),
+    title = "<b>PDP : Loan Term</b>",
+    xaxis = list(title = "<b>Loan term</b>"),
+    yaxis = list(title = "<b>Predicted Probability</b>")
+  )
+
+
+```
+```{r loan_amount}
+pdp_amount <- FeatureEffect$new(predictor, feature = "loan_amount", method = "pdp")
+pdp_data_3 <- pdp_amount$results
+
+p <- ggplot(pdp_data_3, aes(x = loan_amount, y = .value)) +
+  geom_line(color = "#1f77b4", size = 1.2) +
+  scale_x_continuous(labels = dollar) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45))
+
+amount <- ggplotly(p) %>%
+  layout(
+    width = 1100,
+    height = 450,  
+    margin = list(l = 120, r = 30, t = 60, b = 50),
+    font = list(family = "Montserrat", size = 16, color = "black"),
+    title = "<b>PDP : Loan Amount</b>",
+    xaxis = list(title = "<b>Loan amount</b>"),
+    yaxis = list(title = "<b>Predicted Probability</b>")
+  )
+
+```
+
+```{r annual_income}
+pdp_income <- FeatureEffect$new(predictor, feature = "income_annum", method = "pdp")
+pdp_data_4 <- pdp_income$results
+
+p <- ggplot(pdp_data_4, aes(x = income_annum, y = .value)) +
+  geom_line(color = "#1f77b4", size = 1.2) +
+  scale_x_continuous(labels = dollar) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45))
+
+income <- ggplotly(p) %>%
+  layout(
+    width = 1100,
+    height = 450, 
+    margin = list(l = 120, r = 30, t = 60, b = 50),
+    font = list(family = "Montserrat", size = 16, color = "black"),
+    title = "<b>PDP : Annual Income</b>",
+    xaxis = list(title = "<b>Annual income</b>"),
+    yaxis = list(title = "<b>Predicted Probability</b>")
+  )
+
+
+```
+
+```{r grouped_2}
+line_plots <- subplot(
+  term, amount, income,
+  nrows = 1, 
+  shareX = TRUE,  
+  shareY = FALSE, 
+  titleX = TRUE,   
+  titleY = TRUE,
+  margin = 0.07   # Even smaller margin
+) %>%
+  layout(
+    title = list(
+      text = NULL, 
+      x = 0.5,  
+      y = 0.97,
+      font = list(size = 22, color = "black")
+    ),
+    autosize = TRUE, 
+    font = list(family = "Montserrat", size = 14, color = "black")
+  )
+line_plots
+```
+
+## Conclusion
+
+::::: {.columns}
+
+:::: {.column width="60%"}
+This project demonstrated the effectiveness of a Random Forest model in predicting loan repayment defaults, leveraging a wide range of borrower characteristics. The model achieved a high level of accuracy and revealed key features such as credit score, loan term, and income level as significant determinants of loan approval outcomes.
+
+Looking forward, this approach could be extended through the development of a Shiny web application allowing users to upload datasets from future years and apply the model directly for prediction and analysis.
+::::
+
+:::: {.column width="40%"}
+![](XX.ccl.jpg){width="100%"}
+::::
+:::::

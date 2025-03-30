@@ -1,0 +1,107 @@
+/**** Styles de textes pour la page de titre ***/
+.reveal .title {
+  color: white;  /* Titre en blanc */
+}
+
+.reveal .author, .reveal .date .footer {
+  color: white;  /* Auteur et date en blanc */
+}
+
+
+/**** Styles footer ****/
+.reveal .footer {
+  color: #28609b; !important;  /* Texte */
+}
+
+.reveal .footer a {
+  color: #28609b !important;  /* Liens */
+}
+
+.reveal .footer i {
+  color: #28609b !important;  /* Icônes */
+}
+
+/**** Styles TOC ****/
+
+.reveal .toc a {
+  color: black !important;  /* Liens */
+}
+
+/**** Styles table ****/
+
+/* Reduce font size for column headers */
+table.dataTable td, 
+table.dataTable th, 
+.dataTables_info, 
+.dataTables_paginate, 
+.dataTables_filter input, 
+.dataTables_length label {
+    font-size: 20px !important;  /* Ensure all elements have the same size */
+}
+/**** Other styles ****/
+
+.reveal section p {
+    font-size: 25px !important;
+    text-align: justify;
+}
+
+.reveal section.custom-font p {
+    font-size: 21px !important;
+}
+
+/**** Cancel scrolling bars of the graphs ****/
+
+.plot-container {
+    overflow: hidden !important;
+}
+
+.js-plotly-plot {
+    max-width: 100% !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
+}
+
+.callout-tip {
+  background-color: #daecff; 
+  color: #01254b;
+  border-left: 5px solid !important;
+}
+/* delete the icon */
+.callout-icon::before {
+  content: none !important;
+}
+
+
+/* replace by a customized one:
+https://fontawesome.com/start
+*/
+.callout-icon::after {
+  content: "\f1bb"; /* FontAwesome exclamation icon */
+  font-family: "FontAwesome" !important;
+  color: solid !important;
+  font-size: 26px;
+}
+
+.callout-title p {
+  color: black !important;
+  font-weight: bold !important;
+  padding-left: 10px !important;
+}
+/* Change the size of content-box */
+.box {
+  max-height: 380px;  /* Adjust the height of the table */
+  overflow-y: auto;   /* Enable scrolling if needed */
+}
+
+
+/****progress bar****/
+
+
+.reveal .progress span {
+    background: #022346 !important;
+}
+
+
+nav.toc, .toc a, .toc a:visited {
+  color: black !important;
+}
